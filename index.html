@@ -103,30 +103,32 @@ document.getElementById('takePhotoBtn').addEventListener('click', ()=>{
   document.getElementById('cameraInput').click();
 });
 
-// Submit
+// Submit - 用 hidden_iframe 提交，不用 fetch
 document.getElementById('defectForm').addEventListener('submit', async e=>{
   if(imageBlobs.length==0){ e.preventDefault(); alert("Please add at least one image."); return; }
-  
-  e.preventDefault(); // 用 fetch 提交
-  const formData = new FormData(document.getElementById('defectForm'));
-  // 将每张图片转 Base64 并附加字段 image1~image5
-  for(let i=0;i<imageBlobs.length;i++){
-    formData.append('image'+(i+1), await blobToBase64(imageBlobs[i]));
-  }
 
-  fetch(document.getElementById('defectForm').action,{
-    method:'POST',
-    body:formData
-  }).then(r=>r.text()).then(t=>{
-    document.getElementById('submitMessage').textContent="Form submitted successfully!";
-    alert("Form submitted successfully!");
-    // 清空表单
-    document.getElementById('defectForm').reset();
-    document.getElementById('photoPreviews').innerHTML='';
-    imageBlobs = [];
-  }).catch(err=>{
-    alert("Submission failed: "+err);
-  });
+  // 清空原来的 hidden inputs
+  const oldInputs = document.querySelectorAll('input[name^="image"]');
+  oldInputs.forEach(i=>i.remove());
+
+  // 动态生成 hidden input，image1~image5
+  for(let i=0;i<imageBlobs.length;i++){
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'image'+(i+1);
+    input.value = await blobToBase64(imageBlobs[i]);
+    document.getElementById('defectForm').appendChild(input);
+  }
+});
+
+// 通过 hidden_iframe load 显示绿字 + alert
+document.querySelector('iframe[name="hidden_iframe"]').addEventListener('load', ()=>{
+  document.getElementById('submitMessage').textContent = "Form submitted successfully!";
+  alert("Form submitted successfully!");
+  // 清空表单和图片预览
+  document.getElementById('defectForm').reset();
+  document.getElementById('photoPreviews').innerHTML='';
+  imageBlobs = [];
 });
 </script>
 </body>
