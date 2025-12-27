@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QC Defect Submission</title>
+<style>
+  body { font-family: sans-serif; padding: 10px; max-width: 600px; margin: auto; }
+  .row { display: flex; margin-bottom: 10px; flex-wrap: wrap; }
+  .row label { flex: 1; min-width: 120px; }
+  .row input, .row textarea { flex: 2; min-width: 150px; padding: 5px; }
+  .photoPreview { margin-top: 10px; width: 100%; max-height: 150px; object-fit: contain; border: 1px solid #ccc; margin-bottom: 5px; }
+  button { padding: 10px 15px; margin-top: 10px; width: 100%; }
+  #submitMessage { margin-top: 10px; font-weight: bold; color: green; }
+</style>
+</head>
+<body>
+
+<h2>QC Defect Submission</h2>
+
+<form id="defectForm" method="POST" target="hidden_iframe"
+      action="https://script.google.com/macros/s/AKfycby_jQ5GryLAXOyaaPOvKDqL-yxVtfGLcYKDC0VhgUMqXOXVU2TtivLwYlNDV3k0vqm7/exec">
+
+  <div class="row"><label for="salesOrder">Sales Order No.</label><input type="text" name="salesOrder" id="salesOrder" required></div>
+  <div class="row"><label for="itemNo">Item No.</label><input type="text" name="itemNo" id="itemNo" required></div>
+  <div class="row"><label for="customerName">Customer Name</label><input type="text" name="customerName" id="customerName" required></div>
+  <div class="row"><label for="itemName">Item Name</label><input type="text" name="itemName" id="itemName" required></div>
+  <div class="row"><label for="defectDesc">Defect Description</label><textarea name="defectDesc" id="defectDesc" rows="3" required></textarea></div>
+  <div class="row"><label for="defectCount">Defective Item Count</label><input type="number" name="defectCount" id="defectCount" required></div>
+
+  <button type="button" id="takePhotoBtn">📷 Take Photo</button>
+  <input type="file" accept="image/*" id="photoInput">
+  <input type="file" accept="image/*" capture="environment" id="cameraInput" style="display:none;">
+
+  <input type="hidden" name="user" id="userField">
+  <div id="photoPreviews"></div>
+  <button type="submit">Submit</button>
+</form>
+
+<div id="submitMessage"></div>
+<iframe name="hidden_iframe" style="display:none;"></iframe>
+
+<script>
+// URL 参数自动填 user
+function getQueryParam(param) { return new URLSearchParams(window.location.search).get(param); }
+const userFromUrl = getQueryParam('user');
+if(userFromUrl) document.getElementById('userField').value = userFromUrl;
+
+let imageBlobs = []; // 存放每张照片的 Blob
+
+async function compressImage(file, maxWidth=1024, quality=0.7) {
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, maxWidth/img.width);
+      canvas.width = img.width*scale;
+      canvas.height = img.height*scale;
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      canvas.toBlob(blob=>resolve(blob),'image/jpeg',quality);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function blobToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = ()=>resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function handleImage(file){
+  if(imageBlobs.length >= 5){ alert("Maximum 5 images allowed."); return; }
+  const compressed = await compressImage(file);
+  imageBlobs.push(compressed);
+
+  const imgElem = document.createElement('img');
+  imgElem.className = 'photoPreview';
+  imgElem.src = URL.createObjectURL(compressed);
+  document.getElementById('photoPreviews').appendChild(imgElem);
+}
+
+// Gallery
+document.getElementById('photoInput').addEventListener('change', async e=>{
+  if(!e.target.files || e.target.files.length==0) return;
+  await handleImage(e.target.files[0]);
+  e.target.value = '';
+});
+
+// Camera
+document.getElementById('cameraInput').addEventListener('change', async e=>{
+  if(!e.target.files || e.target.files.length==0) return;
+  await handleImage(e.target.files[0]);
+  e.target.value = '';
+});
+
+// Take Photo
+document.getElementById('takePhotoBtn').addEventListener('click', ()=>{
+  document.getElementById('cameraInput').click();
+});
+
+// Submit
+document.getElementById('defectForm').addEventListener('submit', async e=>{
+  if(imageBlobs.length==0){ e.preventDefault(); alert("Please add at least one image."); return; }
+  
+  e.preventDefault(); // 用 fetch 提交
+  const formData = new FormData(document.getElementById('defectForm'));
+  // 将每张图片转 Base64 并附加字段 image1~image5
+  for(let i=0;i<imageBlobs.length;i++){
+    formData.append('image'+(i+1), await blobToBase64(imageBlobs[i]));
+  }
+
+  fetch(document.getElementById('defectForm').action,{
+    method:'POST',
+    body:formData
+  }).then(r=>r.text()).then(t=>{
+    document.getElementById('submitMessage').textContent="Form submitted successfully!";
+    alert("Form submitted successfully!");
+    // 清空表单
+    document.getElementById('defectForm').reset();
+    document.getElementById('photoPreviews').innerHTML='';
+    imageBlobs = [];
+  }).catch(err=>{
+    alert("Submission failed: "+err);
+  });
+});
+</script>
+</body>
+</html>
